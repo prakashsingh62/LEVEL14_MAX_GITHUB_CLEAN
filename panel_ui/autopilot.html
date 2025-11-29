@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Autopilot Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 flex">
+
+    <!-- SIDEBAR -->
+    <aside class="w-64 bg-white shadow-lg h-screen p-5">
+        <h2 class="text-xl font-semibold mb-6">Level 14 Panel</h2>
+        <nav class="flex flex-col gap-4">
+            <a href="/ui/dashboard">Dashboard</a>
+            <a href="/ui/autopilot" class="text-blue-600 font-bold">Autopilot</a>
+            <a href="/ui/rfq">RFQs</a>
+            <a href="/ui/settings">Settings</a>
+        </nav>
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+    <main class="flex-1 p-10">
+
+        <h1 class="text-3xl font-bold mb-6">Autopilot Engine</h1>
+
+
+        <!-- PARSE EMAIL BOX -->
+        <div class="bg-white p-6 rounded shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Parse Email (NLP Engine)</h2>
+
+            <textarea id="emailInput"
+                class="w-full h-40 p-3 border rounded mb-3"
+                placeholder="Paste raw email here..."></textarea>
+
+            <button onclick="parseEmail()"
+                class="px-4 py-2 bg-blue-600 text-white rounded">
+                Parse Email
+            </button>
+
+            <pre id="parseResult"
+                class="mt-4 bg-gray-800 text-white p-4 rounded h-48 overflow-y-scroll"></pre>
+        </div>
+
+
+
+        <!-- ACTION PREDICTION BOX -->
+        <div class="bg-white p-6 rounded shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Test Action Prediction</h2>
+
+            <button onclick="runAISuggestion()"
+                class="px-4 py-2 bg-blue-600 text-white rounded">
+                Run AI Suggestion
+            </button>
+
+            <pre id="resultBox"
+                class="mt-4 bg-gray-800 text-white p-4 rounded h-48 overflow-y-scroll"></pre>
+        </div>
+
+
+
+        <!-- LOG BOX -->
+        <div class="bg-white p-6 rounded shadow mb-6">
+            <h2 class="text-xl font-semibold mb-4">Recent Autopilot Logs</h2>
+
+            <div id="logs"
+                 class="bg-gray-800 text-white p-4 rounded h-64 overflow-y-scroll text-sm">
+                Loading logs...
+            </div>
+        </div>
+
+    </main>
+
+
+
+
+
+    <!-- FULL SCRIPT -->
+    <script>
+
+    // ----------------------------
+    // Parse Email
+    // ----------------------------
+    async function parseEmail() {
+        const rawEmail = document.getElementById("emailInput").value;
+
+        const response = await fetch("/parse_email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ raw_email: rawEmail })
+        });
+
+        const data = await response.json();
+        document.getElementById("parseResult").textContent =
+            JSON.stringify(data, null, 4);
+    }
+
+
+
+
+    // ----------------------------
+    // Run AI Suggestion
+    // ----------------------------
+    async function runAISuggestion() {
+        const rawEmail = document.getElementById("emailInput").value;
+
+        const response = await fetch("/suggest_action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                parsed_email: {
+                    body: rawEmail,
+                    sender: "",
+                    subject: "",
+                    attachments: []
+                },
+                rfq_data: {}
+            })
+        });
+
+        const data = await response.json();
+
+        // Show AI decision
+        document.getElementById("resultBox").textContent =
+            JSON.stringify(data, null, 4);
+
+        // Add immediate log
+        addLogEntry(data.action, data.reason);
+    }
+
+
+
+
+    // ----------------------------
+    // Add Log Entry (Instant Update)
+    // ----------------------------
+    function addLogEntry(action, reason) {
+        const logBox = document.getElementById("logs");
+        const ts = new Date().toLocaleString();
+
+        const row = document.createElement("div");
+        row.className = "mb-2";
+        row.textContent = `${ts} — Action: ${action} | Reason: ${reason}`;
+
+        logBox.prepend(row);
+    }
+
+
+
+
+    // ----------------------------
+    // Auto-Refresh Logs (Backend)
+    // ----------------------------
+    async function autoRefreshLogs() {
+        try {
+            const response = await fetch("/get_logs");
+            const logs = await response.json();
+
+            const logBox = document.getElementById("logs");
+            logBox.innerHTML = "";
+
+            logs.forEach(log => {
+                const ts = log.timestamp || new Date().toLocaleString();
+                const row = document.createElement("div");
+                row.className = "mb-2";
+                row.textContent =
+                    `${ts} — Action: ${log.action} | Reason: ${log.reason}`;
+
+                logBox.appendChild(row);
+            });
+
+        } catch (e) {
+            console.error("Log refresh failed", e);
+        }
+    }
+
+    // Auto-refresh every 5 seconds
+    setInterval(autoRefreshLogs, 5000);
+
+    // Load logs immediately on page load
+    autoRefreshLogs();
+
+    </script>
+
+</body>
+</html>

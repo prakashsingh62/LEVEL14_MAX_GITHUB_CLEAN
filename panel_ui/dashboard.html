@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Autopilot Dashboard</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 text-gray-900">
+
+    <main class="p-10 max-w-4xl mx-auto">
+
+        <h1 class="text-4xl font-bold mb-8 text-center">Autopilot Dashboard</h1>
+
+        <!-- GRID LAYOUT -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+
+            <!-- TOKEN BOX -->
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-2">Token Usage</h2>
+                <p id="tokenBox" class="text-gray-700">Loading...</p>
+            </div>
+
+            <!-- STATUS BOX -->
+            <div class="bg-white p-6 rounded shadow">
+                <h2 class="text-xl font-semibold mb-2">Server Status</h2>
+                <p id="statusBox" class="text-gray-700">Checking...</p>
+            </div>
+        </div>
+
+        <!-- AUTOPILOT TEST BOX -->
+        <div class="bg-white shadow-lg rounded-lg p-6 mb-10">
+            <h2 class="text-xl font-semibold mb-4">Test Autopilot Action</h2>
+
+            <!-- Email Text -->
+            <label class="block text-sm font-medium mb-1">Email Text</label>
+            <textarea id="emailInput" class="w-full border rounded p-2 mb-4 h-28"
+                      placeholder="Paste email content here..."></textarea>
+
+            <!-- RFQ JSON -->
+            <label class="block text-sm font-medium mb-1">RFQ Data (JSON)</label>
+            <textarea id="rfqInput" class="w-full border rounded p-2 mb-4 h-24">
+{ "status": "open", "vendor_delay_days": 1 }
+            </textarea>
+
+            <!-- Button -->
+            <button id="runBtn"
+                    class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                Run Autopilot
+            </button>
+
+            <!-- Result -->
+            <pre id="resultBox"
+                 class="mt-6 bg-gray-900 text-green-300 p-4 rounded h-40 overflow-auto"></pre>
+        </div>
+
+        <!-- LOG BOX -->
+        <div class="bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-semibold mb-2">Recent Autopilot Logs</h2>
+            <pre id="logBox"
+                 class="bg-gray-100 h-40 p-4 overflow-auto text-sm"></pre>
+        </div>
+
+    </main>
+
+    <!-- ===================== FINAL SCRIPT BLOCK ===================== -->
+    <script>
+
+        // ------------------------------
+        // LOAD SERVER STATUS
+        // ------------------------------
+        function loadServerStatus() {
+            fetch("http://127.0.0.1:8080/status")
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("statusBox").innerText =
+                        "Online — " + data.time.replace("T", "  ");
+                })
+                .catch(() => {
+                    document.getElementById("statusBox").innerText =
+                        "Server not reachable";
+                });
+        }
+
+
+        // ------------------------------
+        // LOAD TOKEN USAGE
+        // ------------------------------
+        function loadTokenUsage() {
+            fetch("http://127.0.0.1:8080/tokens")
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById("tokenBox").innerText =
+                        data.used_tokens + " used | " + data.remaining_tokens + " remaining";
+                })
+                .catch(() => {
+                    document.getElementById("tokenBox").innerText =
+                        "Unable to load token data";
+                });
+        }
+
+
+        // ------------------------------
+        // AUTOPILOT RUN BUTTON
+        // ------------------------------
+        document.getElementById("runBtn").onclick = function () {
+
+            const email_text = document.getElementById("emailInput").value;
+            const rfq_json = document.getElementById("rfqInput").value;
+
+            let rfq_data = {};
+            try {
+                rfq_data = JSON.parse(rfq_json);
+            } catch (e) {
+                document.getElementById("resultBox").textContent = "Invalid RFQ JSON!";
+                return;
+            }
+
+            fetch("http://127.0.0.1:8080/suggest_action", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    parsed_email: { text: email_text },
+                    rfq_data: rfq_data
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+                    const result = JSON.stringify(data, null, 2);
+                    document.getElementById("resultBox").textContent = result;
+
+                    // Append to logs
+                    addLog("Action: " + data.action + " | Reason: " + data.reason);
+
+                    // Refresh token usage after every run
+                    loadTokenUsage();
+                })
+                .catch(err => {
+                    document.getElementById("resultBox").textContent = "Error: " + err;
+                });
+        };
+
+
+        // ------------------------------
+        // LOCAL LOG STORAGE
+        // ------------------------------
+        let logs = [];
+
+        function addLog(entry) {
+            logs.push(entry);
+            if (logs.length > 20) logs.shift();
+
+            document.getElementById("logBox").textContent =
+                logs.map((v, i) => (i + 1) + ". " + v).join("\n");
+        }
+
+
+        // ------------------------------
+        // START AUTO REFRESH
+        // ------------------------------
+        loadServerStatus();
+        loadTokenUsage();
+
+        setInterval(loadServerStatus, 5000);
+        setInterval(loadTokenUsage, 5000);
+
+    </script>
+    <!-- =============================================================== -->
+
+</body>
+</html>
